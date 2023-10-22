@@ -50,8 +50,6 @@ internal class ModelDownloadWorker(
             return Result.failure()
         }
 
-        println("[AEROEDGE] POSTING ${destinationFile.path}")
-
         return Result.success(workDataOf(WORKER_LOCAL_MODEL_FILE_PATH_KEY to destinationFile.path))
     }
 

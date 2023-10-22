@@ -35,10 +35,14 @@ internal class DefaultModelDownloaderClient(
 
         downloadZipFile(url, zipFile).getOrElse { return@flow emit(FileDownloadState.OnFailed(it)) }
 
+        println("[AEROEDGE] downloaded ${zipFile.path}")
+
         unzipModelFile(
             zipFile,
             destinationFile
         ).getOrElse { return@flow emit(FileDownloadState.OnFailed(it)) }
+
+        println("[AEROEDGE] unzipped into ${destinationFile.path}")
 
         emit(FileDownloadState.OnSuccess)
     }
@@ -78,6 +82,7 @@ internal class DefaultModelDownloaderClient(
         zipFile: File,
         destinationFile: File,
     ): Result<Unit> = runCatching<Unit> {
+        var found = false
         ZipFile(zipFile).use { zip ->
             zip.entries().asSequence().forEach { entry ->
                 if (entry.name != destinationFile.name) return@forEach
@@ -90,10 +95,15 @@ internal class DefaultModelDownloaderClient(
                         bos.write(bytesIn, 0, read)
                     }
                     bos.close()
+                    found = true
                 }
             }
         }
         zipFile.delete()
+
+        if(!found) {
+            throw IllegalStateException("No entry found with the name ${destinationFile.name} into ${zipFile.name}")
+        }
     }
 
 }
