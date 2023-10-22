@@ -9,6 +9,8 @@ import app.sarama.aeroedge.util.trimToMaxWordCount
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.tensorflow.lite.Interpreter
@@ -25,16 +27,11 @@ class AutoCompleteServiceImpl(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCompleteService {
 
-    private val modelStatusFlow = MutableStateFlow<ModelStatusUpdate?>(null)
+    private val modelStatusFlow = MutableStateFlow<InitializationStatus>(InitializationStatus.NotInitialized)
     private var interpreter: Interpreter? = null
     private val outputBuffer = ByteBuffer.allocateDirect(OutputBufferSize)
     override val initializationStatus: InitializationStatus
-        get() = when (val status = modelStatusFlow.value) {
-            null -> InitializationStatus.NotInitialized
-            is ModelStatusUpdate.OnCompleted -> InitializationStatus.Initialized
-            is ModelStatusUpdate.InProgress -> InitializationStatus.Initializing
-            is ModelStatusUpdate.OnFailed -> InitializationStatus.Error(status.exception)
-        }
+        get() = modelStatusFlow.value
 
     override val inputConfiguration = AutoCompleteInputConfiguration(
         // Minimum number of words to be taken from the end of the input text
@@ -46,14 +43,18 @@ class AutoCompleteServiceImpl(
     )
 
     override suspend fun loadModel(): Result<Unit> {
-        if (initializationStatus == InitializationStatus.Initializing) {
+        if (initializationStatus is InitializationStatus.Initializing) {
             return Result.failure(AutoCompleteServiceError.ModelAlreadyLoading)
         }
 
         withContext(dispatcher) {
             launch {
                 aeroEdge.getModel(ModelName, ModelType.TensorFlowLite).collect {
-                    modelStatusFlow.value = it
+                    modelStatusFlow.value = when (it) {
+                        is ModelStatusUpdate.OnCompleted -> InitializationStatus.Initialized
+                        is ModelStatusUpdate.InProgress -> InitializationStatus.Initializing(it.progress)
+                        is ModelStatusUpdate.OnFailed -> InitializationStatus.Error(it.exception)
+                    }
 
                     when (it) {
                         is ModelStatusUpdate.OnCompleted -> {
@@ -63,7 +64,7 @@ class AutoCompleteServiceImpl(
 
                         is ModelStatusUpdate.InProgress -> println("[AEROEDGE] Loading ${(it.progress * 100).toInt()}%")
                         is ModelStatusUpdate.OnFailed -> {
-                            println("[AEROEDGE] On error! ")
+                            println("[AEROEDGE] On error!")
                             it.exception.printStackTrace()
                         }
 
