@@ -2,6 +2,7 @@ package app.sarama.aeroedge.ui.screen.autocomplete.components
 
 import android.content.res.Configuration.UI_MODE_NIGHT_NO
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -151,25 +153,29 @@ fun SuggestionControlBar(
                 color = MaterialTheme.colorScheme.tertiary
             )
         }
+
         Spacer(modifier = Modifier.weight(1f))
         OutlinedButton(
             onClick = onAccept,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
-            modifier = Modifier.padding(end = 12.dp)
+            modifier = Modifier.padding(end = 10.dp)
         ) {
-            Row {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+            ) {
                 Icon(
                     imageVector = Icons.Default.Check,
                     tint = MaterialTheme.colorScheme.tertiary,
                     contentDescription = null,
                     modifier = Modifier
                         .scale(.8f)
-                        .padding(start = 32.dp)
+                        .padding(start = 24.dp)
                 )
                 Text(
                     text = stringResource(R.string.accept_suggestion_cta),
                     color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.padding(start = 8.dp, end = 32.dp, top = 2.dp)
+                    modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 2.dp)
                 )
             }
 

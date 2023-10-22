@@ -27,18 +27,20 @@ class AutoCompleteViewModel(
     private val isGenerating = MutableStateFlow(false)
     private val hasGenerated = MutableStateFlow(false)
     private val isSuggesting = MutableStateFlow(false)
-    private val isModelInitialized = MutableStateFlow(false)
+    private val modelInitializationStatus = MutableStateFlow<InitializationStatus>(InitializationStatus.NotInitialized)
+
+    val modelStatusUpdate: StateFlow<InitializationStatus>
+        get() = modelInitializationStatus
 
     init {
-        if(autoCompleteService.initializationStatus == InitializationStatus.NotInitialized){
+        modelInitializationStatus.value = autoCompleteService.initializationStatus
+
+        if(modelInitializationStatus.value == InitializationStatus.NotInitialized) {
             viewModelScope.launch {
-                autoCompleteService.loadModel().onFailure { result ->
-                    initModelError = result
+                autoCompleteService.loadModel(viewModelScope).collect {
+                    modelInitializationStatus.emit(it)
                 }
-                isModelInitialized.value = true
             }
-        } else {
-            isModelInitialized.value = true
         }
     }
 
@@ -138,8 +140,8 @@ class AutoCompleteViewModel(
     /**
      * State flow exposing whether input by user should be possible
      */
-    val inputFieldEnabled = combine(isModelInitialized, isGenerating, isSuggesting) { initialized, generating, suggesting ->
-        initialized && !generating && !suggesting
+    val inputFieldEnabled = combine(modelInitializationStatus, isGenerating, isSuggesting) { modelInitializationStatus, generating, suggesting ->
+        modelInitializationStatus is InitializationStatus.Initialized && !generating && !suggesting
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Lazily,

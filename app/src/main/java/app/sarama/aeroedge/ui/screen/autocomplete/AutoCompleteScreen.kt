@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import app.sarama.aeroedge.R
 import app.sarama.aeroedge.service.autocomplete.AutoCompleteInputConfiguration
+import app.sarama.aeroedge.service.autocomplete.InitializationStatus
 import app.sarama.aeroedge.ui.screen.autocomplete.components.AutoCompleteInfo
 import app.sarama.aeroedge.ui.screen.autocomplete.components.AutoCompleteTextField
 import app.sarama.aeroedge.ui.screen.autocomplete.components.TextControlBar
@@ -60,6 +61,21 @@ fun AutoCompleteScreen(
     modifier: Modifier = Modifier
 ) {
     val viewmodel = getViewModel<AutoCompleteViewModel>()
+    val modelStatus = viewmodel.modelStatusUpdate.collectAsState()
+
+    when (val status = modelStatus.value) {
+        InitializationStatus.NotInitialized -> return ModelLoadingScreen(
+            loadingProgress = 0.0F,
+            modifier = modifier,
+        )
+
+        is InitializationStatus.Initializing -> return ModelLoadingScreen(
+            loadingProgress = status.progress,
+            modifier = modifier,
+        )
+
+        else -> Unit
+    }
 
     val textValue = rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(annotatedString = AnnotatedString(""))) }
     val barState by viewmodel.textBarState.collectAsState()
@@ -248,10 +264,9 @@ fun ModelLoadingScreen(
                 .fillMaxHeight()
         ) {
             val percent = (loadingProgress * 100).toInt()
-            println("[AEROEDGE] Loading Progress = $percent%")
 
             Text(
-                "Loading LLM model. Please wait. \n$percent%",
+                "Loading LLM model.\nPlease wait.",
                 color = MaterialTheme.colorScheme.secondary,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.displayLarge,
@@ -262,6 +277,15 @@ fun ModelLoadingScreen(
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth(),
                 progress = loadingProgress
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                "$percent%",
+                color = MaterialTheme.colorScheme.secondary,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.displayLarge,
             )
         }
     }

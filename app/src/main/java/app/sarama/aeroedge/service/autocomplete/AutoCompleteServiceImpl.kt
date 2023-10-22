@@ -7,11 +7,12 @@ import app.sarama.aeroedge.ModelType
 import app.sarama.aeroedge.util.splitToWords
 import app.sarama.aeroedge.util.trimToMaxWordCount
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 import org.tensorflow.lite.Interpreter
 import java.io.File
@@ -27,7 +28,8 @@ class AutoCompleteServiceImpl(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCompleteService {
 
-    private val modelStatusFlow = MutableStateFlow<InitializationStatus>(InitializationStatus.NotInitialized)
+    private val modelStatusFlow =
+        MutableStateFlow<InitializationStatus>(InitializationStatus.NotInitialized)
     private var interpreter: Interpreter? = null
     private val outputBuffer = ByteBuffer.allocateDirect(OutputBufferSize)
     override val initializationStatus: InitializationStatus
@@ -42,41 +44,23 @@ class AutoCompleteServiceImpl(
         initialWordCount = 20
     )
 
-    override suspend fun loadModel(): Result<Unit> {
-        if (initializationStatus is InitializationStatus.Initializing) {
-            return Result.failure(AutoCompleteServiceError.ModelAlreadyLoading)
-        }
-
-        withContext(dispatcher) {
-            launch {
-                aeroEdge.getModel(ModelName, ModelType.TensorFlowLite).collect {
-                    modelStatusFlow.value = when (it) {
-                        is ModelStatusUpdate.OnCompleted -> InitializationStatus.Initialized
-                        is ModelStatusUpdate.InProgress -> InitializationStatus.Initializing(it.progress)
-                        is ModelStatusUpdate.OnFailed -> InitializationStatus.Error(it.exception)
-                    }
-
-                    when (it) {
-                        is ModelStatusUpdate.OnCompleted -> {
-                            interpreter = Interpreter(it.model.localFile.fileChannel)
-                            println("[AEROEDGE] Loaded!")
-                        }
-
-                        is ModelStatusUpdate.InProgress -> println("[AEROEDGE] Loading ${(it.progress * 100).toInt()}%")
-                        is ModelStatusUpdate.OnFailed -> {
-                            println("[AEROEDGE] On error!")
-                            it.exception.printStackTrace()
-                        }
-
-                        else -> Unit
-                    }
-                }
+    override suspend fun loadModel(scope: CoroutineScope) = aeroEdge
+        .getModel(ModelName, ModelType.TensorFlowLite)
+        .onEach {
+            if(it is ModelStatusUpdate.OnCompleted) {
+                this.interpreter = Interpreter(it.model.localFile.fileChannel)
+                println("[AEROEDGE] Interpreter loaded!")
             }
-
         }
+        .map {
+            when (it) {
+                is ModelStatusUpdate.OnCompleted -> InitializationStatus.Initialized
+                is ModelStatusUpdate.InProgress -> InitializationStatus.Initializing(it.progress)
+                is ModelStatusUpdate.OnFailed -> InitializationStatus.Error(it.exception)
+            }
+        }
+        .stateIn(scope)
 
-        return Result.success(Unit)
-    }
 
     private val File.fileChannel: MappedByteBuffer
         get() = FileInputStream(this).channel.map(FileChannel.MapMode.READ_ONLY, 0, length())
